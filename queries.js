@@ -1,15 +1,43 @@
-// Import Book model
+
 const { Book } = require("./Model/Book");
 const { connectDB, mongoose } = require("./config/db");
+
+const mongoose = require("mongoose");
+require("dotenv").config();
+async function connectDB() {
+  await mongoose.connect(process.env.MONGODB_URI);
+  console.log("Successfully connected to MongoDB");
+}
+
+module.exports = { connectDB, mongoose };
+
+
+const { mongoose } = require("../config/db");
+const { Schema } = mongoose;
+
+const bookSchema = new Schema(
+  {
+    title: String,
+    author: String,
+    genre: String,
+    published_year: Number,
+    price: Number,
+    in_stock: { type: Boolean, default: false },
+    pages: Number,
+    publisher: String,
+  },
+  { timestamps: true }
+);
+
+const Book = mongoose.model("Book", bookSchema);
+module.exports = { Book };
+
 
 async function main() {
   await connectDB();
 
-  //   Task 2: Basic CRUD Operations
-  //   Clear it first
   await Book.deleteMany({});
 
-  // 2.1: Use the provided insert_books.js script to insert at least 10 book documents into your collection
   await Book.insertMany([
     {
       title: "The Silent Storm",
@@ -114,24 +142,20 @@ async function main() {
   ]);
   console.log("10 books inserted successfully!");
 
-  //2.2: Find all books in a specific genre
   const books = await Book.find({ genre: "Science Fiction" });
   console.log("All Books", books);
 
-  //   2.3: Find books published after a certain year
   const pub_books = await Book.find({ published_year: { $gt: 2020 } });
   if (pub_books.length === 0) {
     console.log(`No books found published after 2020.`);
   } else {
     console.log("Books published after 2020:", pub_books);
-    // Books published after 2020 in statement format
     console.log(`or\n Books published after 2020:`);
     pub_books.forEach((book) => {
       console.log(`- ${book.title} by ${book.author} (${book.published_year})`);
     });
   }
 
-  // 2.4: Find books by a specific author
   const author_name = "Daniel Brooks";
   const by_author = await Book.find({
     author: { $regex: new RegExp(author_name, "i") },
@@ -145,7 +169,6 @@ async function main() {
     });
   }
 
-  //   2.5: Update the price of a specific book
   const book_title = "The Silent Storm";
   const new_price = 21;
   const update_price = await Book.updateOne(
@@ -160,7 +183,6 @@ async function main() {
     );
   }
 
-  //   2.6:Delete a book by its title
   const results = await Book.deleteOne({ title: book_title });
   if (results.deletedCount === 0) {
     console.log(`No book found with title: ${book_title}`);
@@ -168,8 +190,6 @@ async function main() {
     console.log(`Book "${book_title}" deleted successfully`);
   }
 
-  // Task 3: Advanced Queries
-  //   3.1: Write a query to find books that are both in stock and published after 2010
   const pub_year = 2010;
   const stocked_2010 = await Book.find({
     in_stock: true,
@@ -189,7 +209,6 @@ async function main() {
     );
   }
 
-  // 3.2: Use projection to return only the title, author, and price fields in your queries
   const projec_books = await Book.find({}, "title author price");
   if (projec_books.length === 0) {
     console.log("No book found");
@@ -203,9 +222,7 @@ async function main() {
     );
   }
 
-  // 3.4: Implement sorting to display books by price (both ascending and descending), i prefer ascending
-  const sort_book = await Book.find({}).sort({ price: -1 });
-  //   const sort_book = await Book.find({}).sort({ price: 1 });
+  const sort_book = await Book.find({}).sort({ price: 1 });
   if (sort_book.length === 0) {
     console.log("No book found");
   } else {
@@ -218,7 +235,6 @@ async function main() {
     );
   }
 
-  // 3.5: Use the limit and skip methods to implement pagination (5 books per page)
   const pages = 2;
   const limit = 5;
   const skip = (pages - 1) * limit;
@@ -228,35 +244,33 @@ async function main() {
     .limit(limit);
   console.table(limit_skip);
 
-  // Task 4: Aggregation Pipeline
-  // 4.1: Create an aggregation pipeline to calculate the average price of books by genre
   const avgPrices = await Book.aggregate([
     {
       $group: {
-        _id: "$genre", // group by genre
-        averagePrice: { $avg: "$price" }, // calculate avg price
+        _id: "$genre",
+        averagePrice: { $avg: "$price" },
       },
     },
     {
       $project: {
         _id: 0,
         Genre: "$_id",
-        AveragePrice: { $round: ["$averagePrice", 2] }, // round to 2 decimals
+        AveragePrice: { $round: ["$averagePrice", 2] },
       },
     },
   ]);
   console.table(avgPrices);
 
-  // 4.2: Create an aggregation pipeline to find the author with the most books in the collection
   const topAuthor = await Book.aggregate([
     {
       $group: {
-        _id: "$author", // group by author
-        totalBooks: { $sum: 1 }, // count how many books per author
+        _id: "$author",
+        totalBooks: { $sum: 1 },
+        count,
       },
     },
-    { $sort: { totalBooks: -1 } }, // sort descending
-    { $limit: 1 }, // keep only the top author
+    { $sort: { totalBooks: -1 } },
+    { $limit: 1 },
     {
       $project: {
         _id: 0,
@@ -267,10 +281,8 @@ async function main() {
   ]);
   console.table(topAuthor);
 
-  //4.3: Implement a pipeline that groups books by publication decade and counts them
   const booksByDecade = await Book.aggregate([
     {
-      // Step 1: Calculate decade dynamically (e.g. 2015 → 2010)
       $addFields: {
         decade: {
           $multiply: [{ $floor: { $divide: ["$published_year", 10] } }, 10],
@@ -278,18 +290,15 @@ async function main() {
       },
     },
     {
-      // Step 2: Group by decade
       $group: {
         _id: "$decade",
         totalBooks: { $sum: 1 },
       },
     },
     {
-      // Step 3: Sort by decade (ascending)
       $sort: { _id: 1 },
     },
     {
-      // Step 4: Format output
       $project: {
         _id: 0,
         Decade: { $concat: [{ $toString: "$_id" }, "s"] },
@@ -299,22 +308,18 @@ async function main() {
   ]);
   console.table(booksByDecade);
 
-  //Task 5: Indexing
-  //    5.1: Create an index on the title field for faster searches
   await Book.collection.createIndex({ title: 1 });
   console.log("Index created successfully");
 
-  //   5.2: Create a compound index on author and published_year
   await Book.collection.createIndex({ author: 1, published_year: -1 });
   console.log("Index created with author and published year successfully");
 
-  //   5.3: Use the explain() method to demonstrate the performance improvement with your indexes
   const result = await Book.find({ title: "The Last Kingdom" }).explain(
     "executionStats"
   );
   console.log(JSON.stringify(result.executionStats, null, 2));
 
-  //   End
+  End;
   await mongoose.disconnect();
 }
 
